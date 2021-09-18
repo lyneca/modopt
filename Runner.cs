@@ -80,8 +80,8 @@ namespace ModOpt {
 
                     Dictionary<string, object> defaultValues = new Dictionary<string, object>();
                     try {
-                        object instance = Activator.CreateInstance(type);
-                        defaultValues = JsonConvert.DeserializeObject<Dictionary<string, object>>(JsonConvert.SerializeObject(instance));
+                        module.instance = Activator.CreateInstance(type);
+                        defaultValues = JsonConvert.DeserializeObject<Dictionary<string, object>>(JsonConvert.SerializeObject(module.instance));
                     }
                     catch (Exception e) {
                         Console.WriteLine("Mod Options Menu: ERROR: " + e.Message + "\n" + e.InnerException);
@@ -103,12 +103,14 @@ namespace ModOpt {
                             var o = (JObject)JToken.ReadFrom(reader);
 
                             var properties = ((TypeInfo)type).DeclaredProperties;
+                            var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
                             foreach (var prop in properties) {
                                 var setting = new ModSetting {
                                     category = prop.GetCustomAttribute<CategoryAttribute>()?.Category,
                                     defaultValue = prop.GetCustomAttribute<DefaultValueAttribute>()?.Value,
                                     name = Regex.Replace(prop.Name, @"((?<=\p{Ll})\p{Lu})|((?!\A)\p{Lu}(?>\p{Ll}))", " $0"),
-                                    prop = prop
+                                    prop = prop,
+                                    instance = module.instance
                                 };
                                 var settingDescription = prop.GetCustomAttribute<DescriptionAttribute>()?.Description;
                                 if (!string.IsNullOrEmpty(settingDescription)) {
@@ -119,10 +121,10 @@ namespace ModOpt {
                                     } else setting.description = settingDescription;
                                 }
 
-                                setting.jsonName = char.ToLower(prop.Name[0]) + prop.Name.Substring(1);
+                                setting.field = fields.First(x => x.Name == char.ToLower(prop.Name[0]) + prop.Name.Substring(1));
 
                                 if (setting.defaultValue == null) {
-                                    if (defaultValues.TryGetValue(setting.jsonName, out object val)) {
+                                    if (defaultValues.TryGetValue(setting.field.Name, out object val)) {
                                         setting.defaultValue = val;
                                     }
                                 }
@@ -179,14 +181,11 @@ namespace ModOpt {
                         using (StreamReader json = File.OpenText(module.filePath))
                         using (JsonTextReader reader = new JsonTextReader(json)) {
                             var o = (JObject)JToken.ReadFrom(reader);
-                            foreach (var setting in module.settings) {
-                                var token = o.SelectToken(module.tokenPath);
-                                if (token != null) {
-                                    if (token[setting.jsonName] != null) {
-                                        token[setting.jsonName] = JsonConvert.SerializeObject(setting.value);
-                                    }
-                                }
-                            }
+                            var o2 = JToken.FromObject((module.instance, Catalog.GetJsonNetSerializerSettings()));
+                            Debug.Log(o2.ToString());
+                            var o3 = JObject.Parse("{\"$type\": \"" + module.moduleClass + ", " + module.moduleAssembly + "\"}");
+                            o3.Merge(o2.SelectToken("Item1"));
+                            o.SelectToken(module.tokenPath).Replace(o3);
                             File.WriteAllText(module.filePath + "_mom", o.ToString());
                         }
                     }
@@ -240,6 +239,7 @@ namespace ModOpt {
         public string moduleAssembly;
         public string moduleClass;
         public string tokenPath;
+        public object instance;
     }
 
     [Serializable]
@@ -249,10 +249,15 @@ namespace ModOpt {
         public string name;
         public object defaultValue;
         public object value {
-            get => prop.GetValue(prop);
-            set => prop.SetValue(prop, Convert.ChangeType(value, prop.GetMethod.ReturnType));
+            get => prop.GetValue(instance);
+            set {
+                value = Convert.ChangeType(value, prop.GetMethod.ReturnType);
+                prop.SetValue(instance, value);
+                field.SetValue(instance, value);
+            }
         }
+        public FieldInfo field;
         public PropertyInfo prop;
-        public string jsonName;
+        public object instance;
     }
 }
