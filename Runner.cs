@@ -39,6 +39,15 @@ namespace ModOpt {
                     Debug.LogError(e.InnerException);
                 }
             });
+            DebugLogConsole.AddCommand("mom_save", "", () => {
+                try {
+                    SaveAllMods();
+                    Debug.Log("Saved!");
+                }
+                catch (Exception e) {
+                    Debug.LogError(e.InnerException);
+                }
+            });
 
             EventManager.onReloadJson += OnReloadJson;
             Debug.Log("Mod Options Menu: Finished loading");
@@ -110,10 +119,10 @@ namespace ModOpt {
                                     } else setting.description = settingDescription;
                                 }
 
-                                var nonStaticPropName = char.ToLower(prop.Name[0]) + prop.Name.Substring(1);
+                                setting.jsonName = char.ToLower(prop.Name[0]) + prop.Name.Substring(1);
 
                                 if (setting.defaultValue == null) {
-                                    if (defaultValues.TryGetValue(nonStaticPropName, out object val)) {
+                                    if (defaultValues.TryGetValue(setting.jsonName, out object val)) {
                                         setting.defaultValue = val;
                                     }
                                 }
@@ -160,6 +169,32 @@ namespace ModOpt {
                 }
             }
             return mod;
+        }
+
+        static void SaveAllMods() {
+            foreach (var mod in mods) {
+                foreach (var module in mod.modules) {
+                    try {
+                        var path = module.filePath;
+                        using (StreamReader json = File.OpenText(module.filePath))
+                        using (JsonTextReader reader = new JsonTextReader(json)) {
+                            var o = (JObject)JToken.ReadFrom(reader);
+                            foreach (var setting in module.settings) {
+                                var token = o.SelectToken(module.tokenPath);
+                                if (token != null) {
+                                    if (token[setting.jsonName] != null) {
+                                        token[setting.jsonName] = JsonConvert.SerializeObject(setting.value);
+                                    }
+                                }
+                            }
+                            File.WriteAllText(module.filePath + "_mom", o.ToString());
+                        }
+                    }
+                    catch (UnauthorizedAccessException e) {
+                        Console.WriteLine("Mod Options Menu: ERROR: " + e.Message);
+                    }
+                }
+            }
         }
 
         static List<ModModule> ParseJsonFile(JObject o) {
@@ -218,5 +253,6 @@ namespace ModOpt {
             set => prop.SetValue(prop, Convert.ChangeType(value, prop.GetMethod.ReturnType));
         }
         public PropertyInfo prop;
+        public string jsonName;
     }
 }
