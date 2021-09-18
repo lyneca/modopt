@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using IngameDebugConsole;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
@@ -13,12 +14,47 @@ using ThunderRoad;
 
 namespace ModOpt {
     public class Runner : LevelModule {
-        List<ModData> mods = new List<ModData>();
-        char descriptionDelimiter = '|';
+        static List<ModData> mods = new List<ModData>();
+        static char descriptionDelimiter = '|';
 
         public override IEnumerator OnLoadCoroutine(Level level) {
+            LoadAllMods();
+
+            DebugLogConsole.AddCommand("mom_count", "", () => Debug.Log(mods.Count()));
+            DebugLogConsole.AddCommand("mom_get", "", (int mod, int module, int setting) => {
+                try {
+                    var settingData = mods[mod].modules[module].settings[setting];
+                    var val = settingData.prop.GetValue(settingData.prop);
+                    Debug.Log("Name: " + settingData.name + "\nValue: " + val);
+                    } catch (Exception e) {
+                    Debug.LogError(e.InnerException);
+                }
+                });
+            DebugLogConsole.AddCommand("mom_set", "", (int mod, int module, int setting, string value) => {
+                try {
+                    var settingData = mods[mod].modules[module].settings[setting];
+                    settingData.prop.SetValue(settingData.prop, Convert.ChangeType(value, settingData.value.GetType()));
+                }
+                catch (Exception e) {
+                    Debug.LogError(e.InnerException);
+                }
+            });
+
+            EventManager.onReloadJson += OnReloadJson;
+            Debug.Log("Mod Options Menu: Finished loading");
+            yield break;
+        }
+
+        private void OnReloadJson(EventTime eventTime) {
+            if (eventTime == EventTime.OnEnd) {
+                LoadAllMods();
+            }
+        }
+
+        static void LoadAllMods() {
+            Debug.Log("Mod Options Menu: Loading all mods...");
             var modDirectories = Directory.GetDirectories(FileManager.aaModPath);
-            var mods = new List<ModData>();
+            mods = new List<ModData>();
             foreach (var path in modDirectories) {
                 if (path.Split('\\').Last().StartsWith("_")) continue;
                 var mod = ImportMod(path);
@@ -28,7 +64,7 @@ namespace ModOpt {
             foreach (var mod in mods) {
                 foreach (var module in mod.modules) {
                     var assemblyPath = Path.Combine(mod.path, module.moduleAssembly + ".dll");
-                    Debug.Log("READING ASSEMBLY: " + assemblyPath.ToString());
+                    Debug.Log("Mod Options Menu: READING ASSEMBLY: " + assemblyPath.ToString());
                     Assembly a = Assembly.LoadFile(assemblyPath);
                     Type type = a.GetType(module.moduleClass);
                     if (!type.IsPublic) continue;
@@ -39,7 +75,7 @@ namespace ModOpt {
                         defaultValues = JsonConvert.DeserializeObject<Dictionary<string, object>>(JsonConvert.SerializeObject(instance));
                     }
                     catch (Exception e) {
-                        Console.WriteLine("ERROR: " + e.Message + "\n" + e.InnerException);
+                        Console.WriteLine("Mod Options Menu: ERROR: " + e.Message + "\n" + e.InnerException);
                     }
 
                     var description = type.GetCustomAttribute<DescriptionAttribute>()?.Description;
@@ -63,8 +99,7 @@ namespace ModOpt {
                                     category = prop.GetCustomAttribute<CategoryAttribute>()?.Category,
                                     defaultValue = prop.GetCustomAttribute<DefaultValueAttribute>()?.Value,
                                     name = Regex.Replace(prop.Name, @"((?<=\p{Ll})\p{Lu})|((?!\A)\p{Lu}(?>\p{Ll}))", " $0"),
-                                    getter = prop.GetGetMethod(),
-                                    setter = prop.GetSetMethod()
+                                    prop = prop
                                 };
                                 var settingDescription = prop.GetCustomAttribute<DescriptionAttribute>()?.Description;
                                 if (!string.IsNullOrEmpty(settingDescription)) {
@@ -93,9 +128,7 @@ namespace ModOpt {
                 }
             }
 
-            Debug.Log("LOADED " + mods.Count + " MOD(S)");
-
-            yield break;
+            Debug.Log("Mod Options Menu: Loaded " + mods.Count + " mod(s)");
         }
 
         static ModData ImportMod(string path) {
@@ -125,7 +158,7 @@ namespace ModOpt {
                     }
                 }
                 catch (UnauthorizedAccessException e) {
-                    Console.WriteLine("ERROR: " + e.Message);
+                    Console.WriteLine("Mod Options Menu: ERROR: " + e.Message);
                 }
             }
             return mod;
@@ -183,7 +216,6 @@ namespace ModOpt {
         public string name;
         public object value;
         public object defaultValue;
-        public MethodInfo getter;
-        public MethodInfo setter;
+        public PropertyInfo prop;
     }
 }
