@@ -83,8 +83,7 @@ namespace ModOpt {
                                     }
                                 }
 
-                                //setting.value = o.SelectToken(module.tokenPath + "." + nonStaticPropName);
-                                //setting.value = setting.value.Value;
+                                setting.value = Convert.ChangeType(o.SelectToken(module.tokenPath + "." + nonStaticPropName), prop.PropertyType);
 
                                 module.settings.Add(setting);
                             }
@@ -182,7 +181,7 @@ namespace ModOpt {
         public string category;
         public string description;
         public string name;
-        public dynamic value;
+        public object value;
         public object defaultValue;
         public MethodInfo getter;
         public MethodInfo setter;
