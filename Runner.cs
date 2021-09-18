@@ -24,8 +24,7 @@ namespace ModOpt {
             DebugLogConsole.AddCommand("mom_get", "", (int mod, int module, int setting) => {
                 try {
                     var settingData = mods[mod].modules[module].settings[setting];
-                    var val = settingData.prop.GetValue(settingData.prop);
-                    Debug.Log("Name: " + settingData.name + "\nValue: " + val);
+                    Debug.Log("Name: " + settingData.name + "\nValue: " + settingData.value);
                     } catch (Exception e) {
                     Debug.LogError(e.InnerException);
                 }
@@ -33,7 +32,8 @@ namespace ModOpt {
             DebugLogConsole.AddCommand("mom_set", "", (int mod, int module, int setting, string value) => {
                 try {
                     var settingData = mods[mod].modules[module].settings[setting];
-                    settingData.prop.SetValue(settingData.prop, Convert.ChangeType(value, settingData.value.GetType()));
+                    settingData.value = value;
+                    Debug.Log("Set " + settingData.name + " to " + settingData.value);
                 }
                 catch (Exception e) {
                     Debug.LogError(e.InnerException);
@@ -117,8 +117,6 @@ namespace ModOpt {
                                         setting.defaultValue = val;
                                     }
                                 }
-
-                                setting.value = Convert.ChangeType(o.SelectToken(module.tokenPath + "." + nonStaticPropName), prop.PropertyType);
 
                                 module.settings.Add(setting);
                             }
@@ -214,8 +212,11 @@ namespace ModOpt {
         public string category;
         public string description;
         public string name;
-        public object value;
         public object defaultValue;
+        public object value {
+            get => prop.GetValue(prop);
+            set => prop.SetValue(prop, Convert.ChangeType(value, prop.GetMethod.ReturnType));
+        }
         public PropertyInfo prop;
     }
 }
